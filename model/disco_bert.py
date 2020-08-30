@@ -125,12 +125,14 @@ class DiscoBertModel(Model):
         # super(DiscoBertModel, self).__init__(vocab, regularizer)
         super(DiscoBertModel, self).__init__(vocab)
         self.debug = debug
-        self.embedder = PretrainedBertEmbedder('bert-base-uncased', requires_grad=True, top_layer_only=True)
+        #USE PRETRAINED BERT MODEL 
+        self.embedder = PretrainedBertEmbedder('bert-base-uncased', requires_grad=True, top_layer_only=True) #TEXT ENCODER
 
         self.bert_pretrain_model = bert_pretrain_model
 
+        # INCREASE MAX SEQ LEN FOR BERT FROM 512 TO 768
         if bert_max_length > 512:
-            first_half = self.embedder.bert_model.embeddings.position_embeddings.weight
+            first_half = self.embedder.bert_model.embeddings.position_embeddings.weight #pretrained embedding weights
             # ts = torch.zeros_like(first_half, dtype=torch.float32)
             # second_half = ts.new_tensor(first_half, requires_grad=True)
 
@@ -138,7 +140,9 @@ class DiscoBertModel(Model):
 
             # second_half = torch.empty(first_half.size(), dtype=torch.float32,requires_grad=True)
             # torch.nn.init.normal_(second_half, mean=0.0, std=1.0)
-            out = torch.cat([first_half, second_half], dim=0)
+
+            # Basically, initialise first 568 to original model's, then initialise the remaining
+            out = torch.cat([first_half, second_half], dim=0) 
             self.embedder.bert_model.embeddings.position_embeddings.weight = torch.nn.Parameter(out)
             self.embedder.bert_model.embeddings.position_embeddings.num_embeddings = 512 * 2
             self.embedder.max_pieces = 512 * 2
@@ -192,7 +196,7 @@ class DiscoBertModel(Model):
             self.coref_graph_encoder = graph_encoder
         if self._use_coref and self._use_disco_graph:
             self._fusion_feedforward = fusion_feedforward
-        self._span_extractor = span_extractor
+        self._span_extractor = span_extractor #THE EDU REPRESENTATION EXTRACTOR
 
         self._trigram_block = trigram_block
         self._use_pivot_decode = use_pivot_decode
@@ -285,6 +289,7 @@ class DiscoBertModel(Model):
                 # red_map_p_opt_idx
                 ):
         with autograd.detect_anomaly():
+            #STEP 1: ENCODE ALL TOKENS IN DOC VIA BERT, w_ij —> hB_ij (sentence i, word j)
             input_ids = tokens[self._index]
             input_mask = (input_ids != 0).long()
             output = self.embedder.forward(input_ids=input_ids,
@@ -296,18 +301,23 @@ class DiscoBertModel(Model):
             # top_vec = self._dropout(top_vec)
             label_to_use = None
             if self._use_disco:
-                # if self._use_disco:
+                #STEP 2: AGGREGATE BERT REP OF TOKENS INTO EDU SPAN  {hB_i} —> hS_i
                 disco_mask = (disco_span[:, :, 0] >= 0).long()
                 disco_span = torch.nn.functional.relu(disco_span.float()).long()
                 attended_text_embeddings = self._span_extractor.forward(top_vec, disco_span, input_mask, disco_mask)
                 encoder_output, encoder_output_msk = attended_text_embeddings, disco_mask
                 label_to_use = disco_label
             else:
+                # JUST USE THE SENT REPRESENTATION IF USING NORMAL BERT
                 sent_rep, sent_mask = efficient_head_selection(top_vec, clss)
                 # sent_rep: batch size, sent num, bert hid dim
                 # sent_mask: batch size, sent num
                 encoder_output, encoder_output_msk = sent_rep, sent_mask
                 label_to_use = labels
+
+            #STEP 3 DISCOURSE GRAPH ENCODER
+            # Input: Node: EDU embeddings hS_i, Edge: pre-defined discourse relation and coref mentions
+            # Output: Node: New EDU embedding hG_i after graph propagation
 
             if self._use_disco_graph and not self._use_coref:
                 encoder_output_af_graph = self.disco_graph_encoder.transform_sent_rep(encoder_output,
@@ -319,16 +329,18 @@ class DiscoBertModel(Model):
                                                                                       meta_field,
                                                                                       'disco_coref_graph')
             elif self._use_coref and self._use_disco_graph:
+                # 
                 encoder_output_disco = self.disco_graph_encoder.transform_sent_rep(encoder_output,
                                                                                    encoder_output_msk,
                                                                                    meta_field, 'disco_rst_graph')
                 encoder_output_coref = self.coref_graph_encoder.transform_sent_rep(encoder_output, encoder_output_msk,
                                                                                    meta_field,
                                                                                    'disco_coref_graph')
+                #IF WE USE BOTH GRAPHS, CONCATENATE THEIR OUTPUTS
                 encoder_output_combine = torch.cat([encoder_output_coref, encoder_output_disco], dim=2)
                 encoder_output_af_graph = self._fusion_feedforward.forward(encoder_output_combine)
             else:
-                encoder_output_af_graph = encoder_output
+                encoder_output_af_graph = encoder_output #Normal BERT
 
             if self._pair_oracle:
                 # TODO

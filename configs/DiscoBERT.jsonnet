@@ -11,7 +11,8 @@ local threshold_red_map = [0.0];
 
 local trigram_block=true;
 //local trigram_block=false;
-local cuda_device = [0,1,2,3];
+local cuda_device = -1; #LOCAL 
+//local cuda_device = [0,1,2,3];
 //local cuda_device = [2,3];
 //local cuda_device = [0,1];
 //local cuda_device = 0;
@@ -73,9 +74,10 @@ local num_of_batch_per_train_epo= if debug then 22 else  3000;
 //local global_root = '/scratch/cluster/jcxu/DiscoBERT';
 //local root = '/scratch/cluster/jcxu/data/intern/cnndm';
 
-local global_root = '/datadrive/GETSum';
+//local global_root = '/datadrive/GETSum';
+local global_root = '/Users/kaywong/Projects/discNMT/DiscoBERT';
 //local root = '/datadrive/data/cnndm';
-local root = '/datadrive/data/nyt';
+local root = global_root+'/datadrive/data/nyt';
 //local root = '/datadrive/data/cnn';
 
 local tmp_dir=global_root+'/tmp/';

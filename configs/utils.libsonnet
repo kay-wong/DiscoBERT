@@ -4,6 +4,9 @@ optimizer:"bert_adam",
 lr:1e-5,
 warmup:10000,
 iden : {type:"identity"},
+gcn:{type:"gcn",
+        hdim:768,
+        nlayers:2},
 lstm:{type:"seq2seq",
     "seq2seq_encoder":{
      "type":"lstm",
@@ -12,6 +15,10 @@ lstm:{type:"seq2seq",
      "batch_first":true,
      "bidirectional":true
      }},
+SelfAttnSpan:{
+    type:'self_attentive',
+    input_dim:768
+},
 stacked_self_attention:{
      type:"seq2seq",
      seq2seq_encoder:{
@@ -40,4 +47,5 @@ multi_head_self_attention:{
     values_dim:128,
     output_projection_dim:768
 }},
+
 }
